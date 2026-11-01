@@ -4,7 +4,7 @@ A REAPER-native, clip-launching looper, built as VST3 that talks
 to REAPER through its full C++ extension API (not a sandboxed subset). 
 Instruments and effects stay on real REAPER tracks, the plugin routes MIDI into them.
 
-## Status: Phase 0 (skeleton) + Phase 1 (core engine) complete
+## Status: Phase 0 (skeleton) + Phase 1 (core engine) + Phase 2 (REAPER adapter) complete
 
 **Phase 0** — a minimal MIDI-effect VST3 that:
 - Acquires REAPER's C++ extension API via `IReaperHostApplication::getReaperApi`
@@ -45,10 +45,45 @@ plan for the reasoning):
   outside the audio thread (`Track::clearClip`) does not itself flush
   sounding notes - callers must stop it first.
 
-Not yet implemented: the REAPER adapter beyond `getReaperApi` (track
-creation/routing, transport bridge - Phase 2), hardware control (APC mini
-mk2 - Phase 3), the grid UI (Phase 4), the dual-mode cell editor (Phase 5),
-audio clips (Phase 6), and Record Performance (Phase 7).
+**Phase 2** — the REAPER adapter layer (`source/reaper/`), built on top of
+`ReaperApi`'s `getReaperApi` connection:
+- `ReaperFunctions` — a plain struct of REAPER API function pointers. Every
+  part of the adapter below takes a `const ReaperFunctions&`, never calling
+  the global `::FunctionName` symbols directly; this is the seam that makes
+  all of it unit-testable with a fake REAPER project (`tests/reaper/FakeReaper.h`)
+  instead of a running REAPER instance.
+- `TransportBridge::read` — builds a `HostTransportState` from REAPER's live
+  transport and tempo map (`TimeMap2_timeToBeats` + `TimeMap_GetMeasureInfo`,
+  not a hand-rolled numerator/denominator formula - correct across tempo and
+  time-signature changes). `play`/`stop`/`toggleRecord` drive REAPER's
+  transport directly.
+- `TrackRegistry::listTracks`/`createTrack` — real track names/colours for
+  grid chrome, and track creation wrapped in a REAPER undo block.
+- `TrackRouter::routeColumnToTrack` — the "route a column onto a track"
+  gesture: one real MIDI-only `CreateTrackSend`, filtered to that column's
+  MIDI channel, reused (not duplicated) on repeated calls, wrapped in undo.
+- `ReaperApi::getHostTrack()`/`getHostProject()` (via `IReaperHostApplication::
+  getReaperParent`) — this specific plugin instance's own track/project,
+  not whichever REAPER tab happens to be focused.
+- The Phase 0 editor now lists tracks via `TrackRegistry` instead of calling
+  the raw REAPER functions directly, and marks which track hosts the plugin.
+- 16 new Catch2 tests (54 total) against a fake REAPER project/transport -
+  no REAPER instance needed to run `ctest`.
+
+**Known Phase 2 limitations:**
+- `InsertTrackAtIndex` and the `CSurf_On*` transport functions take no
+  project parameter - they always affect whichever REAPER project tab is
+  currently focused in the UI, not necessarily the one this plugin instance
+  belongs to. This is a REAPER platform limitation (shared by every control
+  surface), not something the adapter can route around; it only matters if
+  the user has multiple project tabs open simultaneously.
+- Track mute/arm/select read-write, and wrapping scene launches/clip edits
+  in undo blocks, are deferred to the phases that actually need them
+  (Phase 4 UI, Phase 5 editing) rather than built speculatively now.
+
+Not yet implemented: hardware control (APC mini mk2 - Phase 3), the grid UI
+(Phase 4), the dual-mode cell editor (Phase 5), audio clips (Phase 6), and
+Record Performance (Phase 7).
 
 ## Build
 
@@ -76,7 +111,9 @@ ctest --test-dir build --output-on-failure
 2. Insert ReaperLooper as a track FX (MIDI effect).
 3. Open its editor — it should read **"REAPER API: connected"** and list
    every track in the current project by name.
-4. In a non-REAPER host (or the Standalone build, also produced by the
+4. Its track list should now also show each track's custom colour (if set)
+   and mark which row is this plugin instance's own host track.
+5. In a non-REAPER host (or the Standalone build, also produced by the
    `ReaperLooper_VST3`/`_Standalone` targets), it should read **"Not
    connected to REAPER"** — that's expected, not a bug.
 
@@ -85,13 +122,15 @@ ctest --test-dir build --output-on-failure
 - `source/core/` — framework-agnostic looper engine (Phase 1+). Links only
   `juce_core`/`juce_audio_basics`/`juce_data_structures` — no REAPER API,
   no GUI, fully unit-testable without a running REAPER instance.
-- `source/reaper/` — the REAPER adapter: API acquisition (`ReaperApi`),
-  and (from Phase 2) track creation/routing, transport/tempo bridging, undo
-  blocks. `source/reaper/sdk/` vendors the REAPER SDK headers needed
-  (`reaper_plugin_functions.h`, `reaper_vst3_interfaces.h`) plus
-  `ReaperForwardDecls.h`, a minimal stand-in for the real `reaper_plugin.h`
-  that avoids pulling in WDL/SWELL (not needed for the VST3-via-`getReaperApi`
-  approach this project uses — see that file's comment for why).
+- `source/reaper/` — the REAPER adapter: API acquisition (`ReaperApi`), the
+  testable `ReaperFunctions` function-pointer table, `TransportBridge`,
+  `TrackRegistry`, `TrackRouter` (Phase 2). `source/reaper/sdk/` vendors the
+  REAPER SDK headers needed (`reaper_plugin_functions.h`,
+  `reaper_vst3_interfaces.h`) plus `ReaperForwardDecls.h`, a minimal
+  stand-in for the real `reaper_plugin.h` that avoids pulling in WDL/SWELL
+  (not needed for the VST3-via-`getReaperApi` approach this project uses —
+  see that file's comment for why).
 - `source/plugin/` — JUCE VST3 entry points.
 - `source/ui/` — grid/transport UI (Phase 4+, not yet present).
-- `tests/` — Catch2, mirrors `source/`.
+- `tests/` — Catch2, mirrors `source/`. `tests/reaper/FakeReaper.h` is the
+  shared fake-REAPER-project harness Phase 2's adapter tests build on.

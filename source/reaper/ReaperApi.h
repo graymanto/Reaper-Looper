@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "ReaperFunctions.h"
 
 // ---------------------------------------------------------------------------
 // REAPER's IReaperHostApplication interface (a VST3 host-context extension)
@@ -63,6 +64,15 @@ namespace reaperlooper
  * thread. Once connected_ is true the resolved function pointers never
  * change again for the life of the plugin instance, so reading them from
  * the audio thread thereafter is safe without further synchronisation.
+ *
+ * One subtlety worth being explicit about: the resolved REAPER API function
+ * pointers (declared at global scope by reaper_plugin_functions.h, and
+ * mirrored into getFunctions()) are shared process-wide - every plugin
+ * instance resolves to the same underlying REAPER engine functions, so
+ * sharing them is correct and harmless. getHostTrack()/getHostProject() are
+ * NOT shared, though: they come from *this instance's* IReaperHostApplication,
+ * because each plugin instance sits on a different track. hostApp_ is
+ * therefore a genuine per-instance member, not file-local state.
  */
 class ReaperApi final : public juce::VST3ClientExtensions
 {
@@ -78,9 +88,20 @@ public:
     /** Count of wanted functions REAPER failed to resolve (-1 = setIHostApplication never ran). */
     int numUnresolvedFunctions() const noexcept { return unresolvedCount_; }
 
+    /** The resolved REAPER API, for use by TransportBridge/TrackRegistry/TrackRouter. Every member is null until isConnected(). */
+    const ReaperFunctions& getFunctions() const noexcept { return functions_; }
+
+    /** The MediaTrack this plugin instance is inserted on, or nullptr (not connected, or not running as track FX - e.g. on the master track). */
+    MediaTrack* getHostTrack() const noexcept;
+
+    /** The ReaProject this plugin instance belongs to, or nullptr if not connected. Pass this (not nullptr) to project-aware REAPER API calls so a multi-tab project doesn't silently affect the wrong one. */
+    ReaProject* getHostProject() const noexcept;
+
 private:
     bool connected_ { false };
     int unresolvedCount_ { -1 };
+    ReaperFunctions functions_;
+    reaper_sdk::IReaperHostApplication* hostApp_ { nullptr };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ReaperApi)
 };

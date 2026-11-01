@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "reaper/TrackRegistry.h"
 
 namespace reaperlooper
 {
@@ -53,24 +54,26 @@ void ReaperLooperEditor::timerCallback()
 
     juce::StringArray lines;
 
-    if (processor_.getReaperApi().isConnected())
+    const auto& api = processor_.getReaperApi();
+    if (api.isConnected())
     {
-        const int numTracks = ::GetNumTracks();
-        lines.add (juce::String (numTracks) + " track(s) in project:");
+        auto* proj = api.getHostProject();
+        const auto tracks = TrackRegistry::listTracks (api.getFunctions(), proj);
 
-        for (int i = 0; i < numTracks; ++i)
+        lines.add (juce::String (tracks.size()) + " track(s) in project:");
+
+        for (size_t i = 0; i < tracks.size(); ++i)
         {
-            if (auto* track = ::GetTrack (nullptr, i))
-            {
-                char name[256] = {};
-                ::GetSetMediaTrackInfo_String (track, "P_NAME", name, false);
+            const auto& t = tracks[i];
+            const juce::String displayName = t.name.isNotEmpty()
+                ? t.name
+                : ("(unnamed track " + juce::String (i + 1) + ")");
+            const juce::String colourNote = t.colourARGB != 0
+                ? (" [colour " + juce::String::toHexString (static_cast<int> (t.colourARGB)) + "]")
+                : juce::String();
 
-                juce::String displayName = juce::String (name).isNotEmpty()
-                    ? juce::String (name)
-                    : ("(unnamed track " + juce::String (i + 1) + ")");
-
-                lines.add ("  " + juce::String (i + 1) + ". " + displayName);
-            }
+            lines.add ("  " + juce::String (i + 1) + ". " + displayName + colourNote
+                      + (t.track == api.getHostTrack() ? "  <- this plugin" : ""));
         }
     }
     else

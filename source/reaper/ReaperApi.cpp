@@ -38,9 +38,27 @@ void ReaperApi::setIHostApplication (Steinberg::FUnknown* hostContext)
         return;
     }
 
-    currentHostApp = static_cast<reaper_sdk::IReaperHostApplication*> (obj);
+    hostApp_ = static_cast<reaper_sdk::IReaperHostApplication*> (obj);
+
+    // Point the trampoline at OUR host app object just long enough to
+    // resolve the process-wide-shared REAPER function table (see the class
+    // doc comment on why that sharing is fine, but hostApp_ itself is not).
+    currentHostApp = hostApp_;
     unresolvedCount_ = REAPERAPI_LoadAPI (&getApiTrampoline);
     connected_ = (unresolvedCount_ == 0);
+
+    if (connected_)
+        functions_ = ReaperFunctions::fromGlobalApi();
+}
+
+MediaTrack* ReaperApi::getHostTrack() const noexcept
+{
+    return hostApp_ != nullptr ? static_cast<MediaTrack*> (hostApp_->getReaperParent (1)) : nullptr;
+}
+
+ReaProject* ReaperApi::getHostProject() const noexcept
+{
+    return hostApp_ != nullptr ? static_cast<ReaProject*> (hostApp_->getReaperParent (3)) : nullptr;
 }
 
 } // namespace reaperlooper

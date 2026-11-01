@@ -93,6 +93,14 @@ add_library(ReaperLooperReaperAdapter STATIC
     source/reaper/ReaperApi.h
     source/reaper/ReaperApi.cpp
     source/reaper/ReaperApiWantList.h
+    source/reaper/ReaperFunctions.h
+    source/reaper/ReaperFunctions.cpp
+    source/reaper/TransportBridge.h
+    source/reaper/TransportBridge.cpp
+    source/reaper/TrackRegistry.h
+    source/reaper/TrackRegistry.cpp
+    source/reaper/TrackRouter.h
+    source/reaper/TrackRouter.cpp
     source/reaper/sdk/ReaperForwardDecls.h
     source/reaper/sdk/reaper_plugin_functions.h
     source/reaper/sdk/reaper_vst3_interfaces.h
@@ -104,6 +112,7 @@ target_compile_definitions(ReaperLooperReaperAdapter PUBLIC JUCE_WEB_BROWSER=0 J
 
 target_link_libraries(ReaperLooperReaperAdapter
     PUBLIC
+        ReaperLooperCore
         juce::juce_audio_processors
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags
