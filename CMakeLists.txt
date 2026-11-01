@@ -66,6 +66,9 @@ add_library(ReaperLooperCore STATIC
     source/core/session/Session.cpp
     source/core/session/ProjectSerializer.h
     source/core/session/ProjectSerializer.cpp
+    source/core/controller/GridViewport.h
+    source/core/controller/LaunchpadProfile.h
+    source/core/controller/LaunchpadProfile.cpp
 )
 
 target_compile_features(ReaperLooperCore PUBLIC cxx_std_20)
@@ -146,6 +149,7 @@ target_sources(ReaperLooper
     PRIVATE
         source/plugin/PluginProcessor.cpp
         source/plugin/PluginEditor.cpp
+        source/plugin/LaunchpadController.cpp
 )
 
 target_include_directories(ReaperLooper

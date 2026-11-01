@@ -16,6 +16,11 @@ ReaperLooperEditor::ReaperLooperEditor (ReaperLooperProcessor& p)
     statusLabel_.setFont (juce::Font (juce::FontOptions (16.0f)));
     addAndMakeVisible (statusLabel_);
 
+    hardwareStatusLabel_.setJustificationType (juce::Justification::centredLeft);
+    hardwareStatusLabel_.setFont (juce::Font (juce::FontOptions (14.0f)));
+    hardwareStatusLabel_.setColour (juce::Label::textColourId, juce::Colour (0xFFAAABBF));
+    addAndMakeVisible (hardwareStatusLabel_);
+
     trackListBox_.setMultiLine (true);
     trackListBox_.setReadOnly (true);
     trackListBox_.setFont (juce::Font (juce::FontOptions (13.0f, juce::Font::plain)));
@@ -27,6 +32,7 @@ ReaperLooperEditor::ReaperLooperEditor (ReaperLooperProcessor& p)
     setSize (560, 420);
 
     statusLabel_.setText (buildStatusText(), juce::dontSendNotification);
+    hardwareStatusLabel_.setText (buildHardwareStatusText(), juce::dontSendNotification);
     startTimerHz (kTimerHz);
 }
 
@@ -44,6 +50,7 @@ void ReaperLooperEditor::resized()
 {
     auto bounds = getLocalBounds().reduced (12);
     statusLabel_.setBounds (bounds.removeFromTop (28));
+    hardwareStatusLabel_.setBounds (bounds.removeFromTop (22));
     bounds.removeFromTop (8);
     trackListBox_.setBounds (bounds);
 }
@@ -51,6 +58,7 @@ void ReaperLooperEditor::resized()
 void ReaperLooperEditor::timerCallback()
 {
     statusLabel_.setText (buildStatusText(), juce::dontSendNotification);
+    hardwareStatusLabel_.setText (buildHardwareStatusText(), juce::dontSendNotification);
 
     juce::StringArray lines;
 
@@ -84,6 +92,12 @@ void ReaperLooperEditor::timerCallback()
     }
 
     trackListBox_.setText (lines.joinIntoString ("\n"), false);
+
+    // LED feedback is driven from here (message thread), matching
+    // LaunchpadController's documented thread-safety contract - processBlock()
+    // (audio thread) only updates Session state; this is what reflects it
+    // onto the hardware.
+    processor_.getLaunchpadController().sendLedUpdates (processor_.getTestSession(), processor_.getViewport());
 }
 
 juce::String ReaperLooperEditor::buildStatusText() const
@@ -98,6 +112,22 @@ juce::String ReaperLooperEditor::buildStatusText() const
              + " function(s) unresolved - REAPER version too old?)";
 
     return "REAPER API: not connected";
+}
+
+juce::String ReaperLooperEditor::buildHardwareStatusText() const
+{
+    const auto& controller = processor_.getLaunchpadController();
+
+    if (controller.getDeviceType() == LaunchpadDeviceType::None)
+        return "Controller: none configured";
+
+    const juce::String deviceLabel = controller.getDeviceType() == LaunchpadDeviceType::ApcMiniMk2
+        ? "APC mini mk2" : "Launchpad Mini Mk3";
+
+    if (controller.getInputDeviceId().isEmpty() && controller.getOutputDeviceId().isEmpty())
+        return "Controller: " + deviceLabel + " not found (check it's connected, then reload the plugin)";
+
+    return "Controller: " + deviceLabel + (controller.isOutputConnected() ? " connected" : " input only (no LED feedback)");
 }
 
 } // namespace reaperlooper

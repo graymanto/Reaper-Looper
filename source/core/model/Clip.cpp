@@ -6,7 +6,6 @@ namespace reaperlooper
 namespace
 {
     constexpr int kQuantizeNone     = -1;
-    constexpr int kFollowTypeNone   = -1;
 
     int quantizeToInt (std::optional<LaunchQuantize> q)
     {

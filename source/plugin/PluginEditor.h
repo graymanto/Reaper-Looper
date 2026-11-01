@@ -25,9 +25,11 @@ public:
 private:
     void timerCallback() override;
     juce::String buildStatusText() const;
+    juce::String buildHardwareStatusText() const;
 
     ReaperLooperProcessor& processor_;
     juce::Label statusLabel_;
+    juce::Label hardwareStatusLabel_;
     juce::TextEditor trackListBox_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ReaperLooperEditor)

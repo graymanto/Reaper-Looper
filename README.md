@@ -1,136 +1,128 @@
 # ReaperLooper
 
-A REAPER-native, clip-launching looper, built as VST3 that talks 
-to REAPER through its full C++ extension API (not a sandboxed subset). 
-Instruments and effects stay on real REAPER tracks, the plugin routes MIDI into them.
+A REAPER-native, Ableton Session View / Logic Live Loops-style clip-launching
+looper, with hardware grid controller support (starting with the Akai APC
+mini mk2). Built as a JUCE VST3 plugin that talks to REAPER through its
+full C++ extension API — not a sandboxed subset — so instruments and
+effects stay on real REAPER tracks and the looper routes MIDI into them,
+rather than maintaining its own shadow mixer.
 
-## Status: Phase 0 (skeleton) + Phase 1 (core engine) + Phase 2 (REAPER adapter) complete
+**Status: early, active development.** The core engine, REAPER integration,
+and hardware control layer exist and are tested, but there is no visual
+grid UI yet — see [Roadmap](#roadmap). Not ready for end users.
 
-**Phase 0** — a minimal MIDI-effect VST3 that:
-- Acquires REAPER's C++ extension API via `IReaperHostApplication::getReaperApi`
-  (see `source/reaper/ReaperApi.{h,cpp}`) — the same mechanism a native
-  REAPER extension uses, reached from inside a plugin instance instead.
-- Shows live connection status and the real project's track list in its
-  editor, proving the bridge end-to-end. **Confirmed working against a real
-  REAPER project.**
+## Why
 
-**Phase 1** — the framework-agnostic looper engine (`source/core/`), not yet
-wired into the plugin's UI or audio path:
-- Dynamic `Session`/`Track`/`Clip` grid model — not a fixed 8x8 like
-  `sequenced`; tracks and scenes grow via `Session::addTrack()`/`addScene()`.
-- Host-bar-grid-relative launch quantization (`LaunchQuantizer`), resolved
-  sample-accurately within a block (`Track::processBlock` splits the block
-  at the exact sample a boundary falls on, not just at block granularity).
-- Independent per-clip loop phase, no session-wide master loop
-  (`LoopSegmenter` handles mid-block loop-boundary crossings).
-- Four launch modes (Toggle/Trigger/Gate/Repeat), Ableton-style scene
-  launch, Legato (phase carries over when switching clips), per-clip Follow
-  Actions, and Capture (retroactively turn recent live input into a clip).
-- `ValueTree`-based serialization (`ProjectSerializer`), mirroring
-  `sequenced`'s pattern.
-- 38 Catch2 tests covering all of the above (`ctest --test-dir build`).
+Most looper plugins feel like a world apart from the DAW they're loaded
+into: their own mixer, their own transport, no awareness of your actual
+track names or colours. ReaperLooper is built the other way around —
+column routing creates real REAPER track sends, launches are quantized to
+REAPER's own tempo map and bar grid, and everything (routing changes, track
+creation) lands in REAPER's own undo history.
 
-**Known Phase 1 limitations** (by design, to keep scope bounded - see the
-plan for the reasoning):
-- Tracks and scenes can be added and grown, but not removed or reordered.
-- Multi-bar quantize/follow-action targets beyond the current bar assume
-  future bars are the same length as the current one; this self-corrects
-  every block as fresh transport data arrives, so it's only approximate
-  when a tempo/time-signature change falls within the lookahead window.
-- At most one launch/stop boundary resolves per audio block; a Repeat
-  retrigger interval shorter than one block will have later retriggers
-  land on the following block(s) instead.
-- Capture's loop length is an explicit parameter, not auto-detected
-  (unlike Ableton's heuristic), and stopping/clearing an active clip from
-  outside the audio thread (`Track::clearClip`) does not itself flush
-  sounding notes - callers must stop it first.
+## Features so far
 
-**Phase 2** — the REAPER adapter layer (`source/reaper/`), built on top of
-`ReaperApi`'s `getReaperApi` connection:
-- `ReaperFunctions` — a plain struct of REAPER API function pointers. Every
-  part of the adapter below takes a `const ReaperFunctions&`, never calling
-  the global `::FunctionName` symbols directly; this is the seam that makes
-  all of it unit-testable with a fake REAPER project (`tests/reaper/FakeReaper.h`)
-  instead of a running REAPER instance.
-- `TransportBridge::read` — builds a `HostTransportState` from REAPER's live
-  transport and tempo map (`TimeMap2_timeToBeats` + `TimeMap_GetMeasureInfo`,
-  not a hand-rolled numerator/denominator formula - correct across tempo and
-  time-signature changes). `play`/`stop`/`toggleRecord` drive REAPER's
-  transport directly.
-- `TrackRegistry::listTracks`/`createTrack` — real track names/colours for
-  grid chrome, and track creation wrapped in a REAPER undo block.
-- `TrackRouter::routeColumnToTrack` — the "route a column onto a track"
-  gesture: one real MIDI-only `CreateTrackSend`, filtered to that column's
-  MIDI channel, reused (not duplicated) on repeated calls, wrapped in undo.
-- `ReaperApi::getHostTrack()`/`getHostProject()` (via `IReaperHostApplication::
-  getReaperParent`) — this specific plugin instance's own track/project,
-  not whichever REAPER tab happens to be focused.
-- The Phase 0 editor now lists tracks via `TrackRegistry` instead of calling
-  the raw REAPER functions directly, and marks which track hosts the plugin.
-- 16 new Catch2 tests (54 total) against a fake REAPER project/transport -
-  no REAPER instance needed to run `ctest`.
+- **Full REAPER API access from a VST3.** Acquires REAPER's complete C++
+  extension API via `IReaperHostApplication::getReaperApi` — the same
+  mechanism REAPER's own native extensions use — rather than being limited
+  to generic plugin parameters.
+- **A dynamic clip grid engine.** Tracks and scenes grow as needed, not a
+  fixed 8×8. Independent per-clip loop length and phase (no "master loop"
+  forcing shorter clips silent). Host-bar-grid-relative launch
+  quantization, resolved sample-accurately within an audio block.
+- **Four launch modes** — Toggle, Trigger, Gate, Repeat — plus Ableton-style
+  whole-row scene launch, **Legato** (a replacing clip continues from the
+  old one's playback position instead of restarting), per-clip **Follow
+  Actions** (auto-advance to another clip after N bars), and **Capture**
+  (turn what was just played into a clip, retroactively).
+- **Real REAPER track routing.** Pointing a grid column at a track creates
+  an actual REAPER MIDI send, filtered to that column's channel — not an
+  internal routing table.
+- **APC mini mk2 support.** Full pad/scene/track-button mapping and
+  diff-cached LED feedback reflecting live clip state (off / occupied /
+  queued / playing / stop-queued), with correct note-on *and* note-off
+  handling so Gate and Repeat launch modes work from real hardware.
+- **Project save/load** via a versioned, validated serialization format.
 
-**Known Phase 2 limitations:**
-- `InsertTrackAtIndex` and the `CSurf_On*` transport functions take no
-  project parameter - they always affect whichever REAPER project tab is
-  currently focused in the UI, not necessarily the one this plugin instance
-  belongs to. This is a REAPER platform limitation (shared by every control
-  surface), not something the adapter can route around; it only matters if
-  the user has multiple project tabs open simultaneously.
-- Track mute/arm/select read-write, and wrapping scene launches/clip edits
-  in undo blocks, are deferred to the phases that actually need them
-  (Phase 4 UI, Phase 5 editing) rather than built speculatively now.
+## Roadmap
 
-Not yet implemented: hardware control (APC mini mk2 - Phase 3), the grid UI
-(Phase 4), the dual-mode cell editor (Phase 5), audio clips (Phase 6), and
-Record Performance (Phase 7).
+- [x] REAPER-native plugin shell (VST3 + full C++ API access)
+- [x] Core looper engine (dynamic grid, quantized launch, scene launch,
+      legato, follow actions, capture)
+- [x] REAPER adapter (track creation, MIDI routing, transport/tempo sync,
+      undo integration)
+- [x] APC mini mk2 hardware control
+- [ ] The grid UI
+- [ ] Cell MIDI editing — a built-in piano roll, or REAPER's own MIDI
+      editor via a hidden holding track, switchable
+- [ ] Audio clips (tempo-synced file playback)
+- [ ] Record Performance — capture a live grid performance as real MIDI
+      items on the timeline, for song arrangement/prototyping
+- [ ] Launchpad Mini Mk3 support
+- [ ] Companion extension for a REAPER Action List entry / global hotkey
 
-## Build
+## Building
+
+Requirements: CMake ≥ 3.22, Xcode 15+ / Clang 14+ (macOS), C++20.
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target ReaperLooper_VST3 -j 8
 ```
 
-The VST3 is copied to `~/Library/Audio/Plug-Ins/VST3/ReaperLooper.vst3`
-automatically (`COPY_PLUGIN_AFTER_BUILD TRUE`). Restart REAPER (or rescan
-plugins) to pick up a new build.
+The VST3 is installed to `~/Library/Audio/Plug-Ins/VST3/ReaperLooper.vst3`
+automatically. Restart REAPER (or rescan plugins) to pick up a new build.
 
-**Requirements:** CMake ≥ 3.22, Xcode 15+ / Clang 14+, C++20.
-
-## Test
+### Testing
 
 ```bash
 cmake --build build --target ReaperLooperTests -j 8
 ctest --test-dir build --output-on-failure
 ```
 
-## Manual verification (do this next)
+The engine and REAPER-adapter logic are both fully unit-tested without
+needing a running REAPER instance — the adapter layer is built around a
+`ReaperFunctions` function-pointer table that tests substitute with a fake
+REAPER project (`tests/reaper/FakeReaper.h`).
 
-1. Open REAPER, add an audio or MIDI track.
-2. Insert ReaperLooper as a track FX (MIDI effect).
-3. Open its editor — it should read **"REAPER API: connected"** and list
-   every track in the current project by name.
-4. Its track list should now also show each track's custom colour (if set)
-   and mark which row is this plugin instance's own host track.
-5. In a non-REAPER host (or the Standalone build, also produced by the
-   `ReaperLooper_VST3`/`_Standalone` targets), it should read **"Not
-   connected to REAPER"** — that's expected, not a bug.
+### Trying it out
 
-## Project layout
+Insert `ReaperLooper` as an FX on any track in REAPER. With no grid UI yet,
+its editor confirms the integration is live: REAPER connection status, the
+current project's track list (names/colours, and which track hosts the
+plugin instance), and whether an APC mini mk2 was found. With one
+connected, press Play in REAPER, then press a lit pad — it should light
+solid, and pressing it again should queue a stop on the next bar.
 
-- `source/core/` — framework-agnostic looper engine (Phase 1+). Links only
-  `juce_core`/`juce_audio_basics`/`juce_data_structures` — no REAPER API,
-  no GUI, fully unit-testable without a running REAPER instance.
-- `source/reaper/` — the REAPER adapter: API acquisition (`ReaperApi`), the
-  testable `ReaperFunctions` function-pointer table, `TransportBridge`,
-  `TrackRegistry`, `TrackRouter` (Phase 2). `source/reaper/sdk/` vendors the
-  REAPER SDK headers needed (`reaper_plugin_functions.h`,
-  `reaper_vst3_interfaces.h`) plus `ReaperForwardDecls.h`, a minimal
-  stand-in for the real `reaper_plugin.h` that avoids pulling in WDL/SWELL
-  (not needed for the VST3-via-`getReaperApi` approach this project uses —
-  see that file's comment for why).
-- `source/plugin/` — JUCE VST3 entry points.
-- `source/ui/` — grid/transport UI (Phase 4+, not yet present).
-- `tests/` — Catch2, mirrors `source/`. `tests/reaper/FakeReaper.h` is the
-  shared fake-REAPER-project harness Phase 2's adapter tests build on.
+## Architecture
+
+- `source/core/` — the framework-agnostic looper engine (`Session`,
+  `Track`, `Clip`) and the hardware grid-controller abstraction
+  (`LaunchpadProfile`, `GridViewport`). No REAPER or GUI dependency; fully
+  unit-testable in isolation.
+- `source/reaper/` — the REAPER integration layer: acquiring the API,
+  transport/tempo-map bridging, track creation, and MIDI routing.
+- `source/plugin/` — the JUCE VST3 plugin itself, and `LaunchpadController`
+  (opens a controller's MIDI ports, translates pad/button presses into
+  engine calls, drives its LEDs).
+- `source/ui/` *(coming in a later phase)* — the grid interface.
+- `tests/` — Catch2, mirroring `source/`.
+
+### Known limitations
+
+- A hardware controller's physical grid is fixed-size (8×8); the engine's
+  logical grid can grow past that. The mapping between them
+  (`GridViewport`) already supports paging, but nothing exposes scrolling
+  controls yet — until the grid UI exists, only the bottom-left 8×8 of a
+  larger project is reachable from hardware.
+- A Gate-mode pad press's immediate note-off lands at the start of the
+  audio block it's processed in, not its exact input sample — a minor,
+  acknowledged timing approximation (quantized launches, by contrast, are
+  resolved sample-accurately).
+- Launchpad Mini Mk3 mapping exists in code but is unverified against real
+  hardware, and its queued/stop-queued states use static colour rather
+  than the Mk3's native flash/pulse modes.
+
+## License
+
+TBD.

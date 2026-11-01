@@ -45,7 +45,11 @@ double nextBoundary (const HostTransportState& transport, LaunchQuantize quantiz
         case LaunchQuantize::None:    return pos;
         case LaunchQuantize::Quarter: return ceilToMultiple (pos, 1.0);
         case LaunchQuantize::Half:    return ceilToMultiple (pos, 2.0);
-        default: break;
+        case LaunchQuantize::OneBar:
+        case LaunchQuantize::TwoBars:
+        case LaunchQuantize::FourBars:
+        case LaunchQuantize::EightBars:
+            break; // handled below - all four align to the bar grid the same way, just with a different N.
     }
 
     // Bar-based: align to the host's actual bar grid (barIndex), approximating
