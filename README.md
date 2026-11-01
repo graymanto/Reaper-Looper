@@ -1,13 +1,8 @@
 # ReaperLooper
 
-A REAPER-native, Ableton Session View / Logic Live Loops-style clip-launching
-looper, built as a JUCE 8 VST3 that talks to REAPER through its full C++
-extension API (not a sandboxed subset) — instruments and effects stay on real
-REAPER tracks, the plugin routes MIDI into them.
-
-See `/Users/grahamthomas/.claude/plans/linear-exploring-fox.md` for the full
-architecture plan, phased roadmap, and the REAPER API / APC mini mk2 protocol
-details that were verified while designing this.
+A REAPER-native, clip-launching looper, built as VST3 that talks 
+to REAPER through its full C++ extension API (not a sandboxed subset). 
+Instruments and effects stay on real REAPER tracks, the plugin routes MIDI into them.
 
 ## Status: Phase 0 (skeleton) + Phase 1 (core engine) complete
 
@@ -100,8 +95,3 @@ ctest --test-dir build --output-on-failure
 - `source/plugin/` — JUCE VST3 entry points.
 - `source/ui/` — grid/transport UI (Phase 4+, not yet present).
 - `tests/` — Catch2, mirrors `source/`.
-
-Code reuse note: this project is a sibling of `/Users/grahamthomas/Code/sequenced`
-(a more general JUCE MIDI sequencer) and borrows its visual language and a
-few data-structure patterns by copy-and-adapt, not as a shared dependency —
-the two are expected to diverge completely.
