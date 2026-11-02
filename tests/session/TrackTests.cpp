@@ -163,6 +163,31 @@ TEST_CASE ("Gate mode launches and stops immediately, bypassing quantize", "[tra
     REQUIRE (hasAnyNoteOff (up));
 }
 
+TEST_CASE ("handlePadDownImmediate bypasses quantize regardless of launch mode", "[track]")
+{
+    Track t;
+    t.prepare (kSampleRate);
+    t.setDefaultQuantize (LaunchQuantize::FourBars); // would never resolve via a normal handlePadDown in this test
+    t.setClip (0, makeClip (4.0, LaunchMode::Toggle));
+
+    juce::MidiBuffer output;
+    const auto transport = transportAt (1.3);
+    t.handlePadDownImmediate (0, transport, output);
+
+    REQUIRE (t.getActiveSlot() == 0); // resolved inline, no quantize wait
+}
+
+TEST_CASE ("handlePadDownImmediate is a no-op on an empty slot", "[track]")
+{
+    Track t;
+    t.prepare (kSampleRate);
+
+    juce::MidiBuffer output;
+    t.handlePadDownImmediate (0, transportAt (0.0), output);
+
+    REQUIRE (t.getActiveSlot() == -1);
+}
+
 TEST_CASE ("Legato carries the old clip's loop phase into the new one", "[track]")
 {
     Track t;

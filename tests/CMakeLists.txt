@@ -10,6 +10,7 @@ add_executable(ReaperLooperTests
     reaper/TrackRouterTests.cpp
     controller/LaunchpadProfileTests.cpp
     controller/GridViewportTests.cpp
+    plugin/UiEventQueueTests.cpp
 )
 
 target_include_directories(ReaperLooperTests PRIVATE ${CMAKE_SOURCE_DIR}/source)

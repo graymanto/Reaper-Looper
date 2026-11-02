@@ -7,9 +7,10 @@ full C++ extension API — not a sandboxed subset — so instruments and
 effects stay on real REAPER tracks and the looper routes MIDI into them,
 rather than maintaining its own shadow mixer.
 
-**Status: early, active development.** The core engine, REAPER integration,
-and hardware control layer exist and are tested, but there is no visual
-grid UI yet — see [Roadmap](#roadmap). Not ready for end users.
+**Status: early, active development.** The engine, REAPER integration,
+hardware control, and a working grid UI all exist and are tested — but
+cell editing is still a placeholder (see [Roadmap](#roadmap)) and audio
+clips/Record Performance aren't built yet. Not ready for end users.
 
 ## Why
 
@@ -43,6 +44,13 @@ creation) lands in REAPER's own undo history.
   queued / playing / stop-queued), with correct note-on *and* note-off
   handling so Gate and Repeat launch modes work from real hardware.
 - **Project save/load** via a versioned, validated serialization format.
+- **A real grid UI.** The clip grid, track headers with a REAPER-track
+  routing picker and stop button, the scene-launch rail, paging/add
+  controls for growing past the visible window, and a transport strip
+  showing REAPER's live position/tempo. Mouse clicks and APC mini mk2 pad
+  presses are fully equivalent inputs — both go through the same engine
+  calls. Cell content is still a placeholder (see below); the real editor
+  is next.
 
 ## Roadmap
 
@@ -52,7 +60,7 @@ creation) lands in REAPER's own undo history.
 - [x] REAPER adapter (track creation, MIDI routing, transport/tempo sync,
       undo integration)
 - [x] APC mini mk2 hardware control
-- [ ] The grid UI
+- [x] The grid UI
 - [ ] Cell MIDI editing — a built-in piano roll, or REAPER's own MIDI
       editor via a hidden holding track, switchable
 - [ ] Audio clips (tempo-synced file playback)
@@ -87,12 +95,15 @@ REAPER project (`tests/reaper/FakeReaper.h`).
 
 ### Trying it out
 
-Insert `ReaperLooper` as an FX on any track in REAPER. With no grid UI yet,
-its editor confirms the integration is live: REAPER connection status, the
-current project's track list (names/colours, and which track hosts the
-plugin instance), and whether an APC mini mk2 was found. With one
-connected, press Play in REAPER, then press a lit pad — it should light
-solid, and pressing it again should queue a stop on the next bar.
+Insert `ReaperLooper` as an FX on any track in REAPER (or run the
+Standalone build to try the UI without REAPER - it'll just show
+"not connected" where REAPER data would appear). A new instance starts
+with an 8×8 grid: double-click an empty cell for a short placeholder clip
+(real cell editing is next on the roadmap), click it to launch, press
+Play in REAPER first if launches don't seem to resolve - quantized
+launches only resolve while the transport is running. "+ Track"/"+ Scene"
+grow the grid past 8×8; the paging arrows (`<` `>` `^` `v`) move the
+visible window.
 
 ## Architecture
 
@@ -102,19 +113,28 @@ solid, and pressing it again should queue a stop on the next bar.
   unit-testable in isolation.
 - `source/reaper/` — the REAPER integration layer: acquiring the API,
   transport/tempo-map bridging, track creation, and MIDI routing.
-- `source/plugin/` — the JUCE VST3 plugin itself, and `LaunchpadController`
+- `source/plugin/` — the JUCE VST3 plugin itself, `LaunchpadController`
   (opens a controller's MIDI ports, translates pad/button presses into
-  engine calls, drives its LEDs).
-- `source/ui/` *(coming in a later phase)* — the grid interface.
+  engine calls, drives its LEDs), and `UiEventQueue` (the equivalent path
+  for mouse input - everything that mutates the grid is applied on the
+  audio thread, whether it came from hardware or the UI).
+- `source/ui/` — the grid UI: `Theme`/`ReaperLooperLookAndFeel` (the
+  visual language), `GridView`/`ClipCell` (the grid itself), `TransportBar`.
 - `tests/` — Catch2, mirroring `source/`.
 
 ### Known limitations
 
-- A hardware controller's physical grid is fixed-size (8×8); the engine's
-  logical grid can grow past that. The mapping between them
-  (`GridViewport`) already supports paging, but nothing exposes scrolling
-  controls yet — until the grid UI exists, only the bottom-left 8×8 of a
-  larger project is reachable from hardware.
+- Cells can't be edited yet — double-clicking an empty one creates a fixed
+  1-bar placeholder clip (one note), and that's the only way to get
+  content into the grid today. Real editing (a built-in piano roll, or
+  REAPER's own MIDI editor via a hidden holding track) is next.
+- No density-weighted visualization on a clip's circular badge (an evenly
+  spaced tick ring instead) and no bundled custom typeface (system fonts) -
+  both cosmetic, deferred rather than essential.
+- If two grid columns are routed to the same REAPER track, they currently
+  share one REAPER send (matched by destination track, not by channel) -
+  the most recently set channel wins for it. Narrow edge case, not yet
+  fixed.
 - A Gate-mode pad press's immediate note-off lands at the start of the
   audio block it's processed in, not its exact input sample — a minor,
   acknowledged timing approximation (quantized launches, by contrast, are

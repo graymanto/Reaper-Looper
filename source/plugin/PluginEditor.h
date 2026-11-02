@@ -2,15 +2,19 @@
 
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
+#include "ui/ReaperLooperLookAndFeel.h"
+#include "ui/transport/TransportBar.h"
+#include "ui/grid/GridView.h"
 
 namespace reaperlooper
 {
 
 /**
- * Phase 0 skeleton editor. No looper UI yet - this exists purely to make
- * the REAPER API connection visible: whether IReaperHostApplication was
- * found, and (if so) the live track count/names read back through the
- * resolved function pointers. Phase 4 replaces this with the real grid.
+ * The real grid editor (Phase 4) - replaces the Phase 0-3 plain-text
+ * status view with TransportBar + GridView. Every interaction is pushed
+ * into the processor's UiEventQueue (or, for routing, calls TrackRouter
+ * directly - that doesn't touch Session/Track, see UiEventQueue's doc
+ * comment for why the two are handled differently); refresh() just reads.
  */
 class ReaperLooperEditor final : public juce::AudioProcessorEditor,
                                   private juce::Timer
@@ -24,13 +28,14 @@ public:
 
 private:
     void timerCallback() override;
-    juce::String buildStatusText() const;
+    juce::String buildReaperStatusText() const;
     juce::String buildHardwareStatusText() const;
 
     ReaperLooperProcessor& processor_;
-    juce::Label statusLabel_;
-    juce::Label hardwareStatusLabel_;
-    juce::TextEditor trackListBox_;
+    ReaperLooperLookAndFeel lookAndFeel_;
+
+    TransportBar transportBar_;
+    GridView gridView_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ReaperLooperEditor)
 };

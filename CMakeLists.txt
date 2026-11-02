@@ -150,6 +150,10 @@ target_sources(ReaperLooper
         source/plugin/PluginProcessor.cpp
         source/plugin/PluginEditor.cpp
         source/plugin/LaunchpadController.cpp
+        source/ui/ReaperLooperLookAndFeel.cpp
+        source/ui/grid/ClipCell.cpp
+        source/ui/grid/GridView.cpp
+        source/ui/transport/TransportBar.cpp
 )
 
 target_include_directories(ReaperLooper

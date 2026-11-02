@@ -154,6 +154,15 @@ void Track::handlePadUp (int row, const HostTransportState& transport, juce::Mid
         repeating_ = false;
 }
 
+void Track::handlePadDownImmediate (int row, const HostTransportState& transport, juce::MidiBuffer& immediateOutput)
+{
+    if (! hasClip (row))
+        return;
+
+    hasQueuedBoundary_ = false;
+    resolveLaunchNow (row, transport.positionQuarterNotes, transport, &immediateOutput, 0);
+}
+
 void Track::handleSceneLaunchForRow (int row, const HostTransportState& transport)
 {
     if (! hasClip (row))

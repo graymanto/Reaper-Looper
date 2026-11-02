@@ -110,6 +110,9 @@ public:
     void handlePadDown (int row, const HostTransportState& transport, juce::MidiBuffer& immediateOutput);
     void handlePadUp (int row, const HostTransportState& transport, juce::MidiBuffer& immediateOutput);
 
+    /** Launches `row` immediately, bypassing quantize entirely - e.g. a UI's shift+click "launch now" gesture. Unlike Gate mode, this does not require holding anything; it's a one-shot override of whatever LaunchMode the clip has. No-op if `row` has no clip. */
+    void handlePadDownImmediate (int row, const HostTransportState& transport, juce::MidiBuffer& immediateOutput);
+
     /** Ableton-style scene launch: launches this track's clip at `row` (restarting it even if already playing), or stops the track if `row` has no clip. */
     void handleSceneLaunchForRow (int row, const HostTransportState& transport);
 
